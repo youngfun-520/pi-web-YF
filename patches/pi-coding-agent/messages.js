@@ -5,6 +5,10 @@
  * and provides a transformer to convert them to LLM-compatible messages.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+
 /** Format a Unix timestamp (ms) to Beijing time string */
 function formatBeijingTime(ts) {
     if (ts == null) return "";
@@ -18,15 +22,12 @@ function formatBeijingTime(ts) {
     return `${y}-${mo}-${dd} ${h}:${mi}:${s}`;
 }
 
-/** Read defaultLanguage from settings.json */
-let _langCache = null;
+/** Read defaultLanguage from settings.json (ESM compatible) */
 function getLanguage() {
     try {
-        const fs = require("fs");
-        const path = require("path");
-        const agentDir = process.env.PI_CODING_AGENT_DIR || require("os").homedir() + "/.pi/agent";
-        const settingsPath = path.join(agentDir, "settings.json");
-        const raw = fs.readFileSync(settingsPath, "utf-8");
+        const agentDir = process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");
+        const settingsPath = join(agentDir, "settings.json");
+        const raw = readFileSync(settingsPath, "utf-8");
         const settings = JSON.parse(raw);
         return settings.defaultLanguage || "zh";
     } catch { return "zh"; }
