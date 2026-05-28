@@ -17,6 +17,20 @@ function formatBeijingTime(ts) {
     const s = String(d.getUTCSeconds()).padStart(2, "0");
     return `${y}-${mo}-${dd} ${h}:${mi}:${s}`;
 }
+
+/** Read defaultLanguage from settings.json */
+let _langCache = null;
+function getLanguage() {
+    try {
+        const fs = require("fs");
+        const path = require("path");
+        const agentDir = process.env.PI_CODING_AGENT_DIR || require("os").homedir() + "/.pi/agent";
+        const settingsPath = path.join(agentDir, "settings.json");
+        const raw = fs.readFileSync(settingsPath, "utf-8");
+        const settings = JSON.parse(raw);
+        return settings.defaultLanguage || "zh";
+    } catch { return "zh"; }
+}
 export const COMPACTION_SUMMARY_PREFIX = `The conversation history before this point was compacted into the following summary:
 
 <summary>
@@ -124,7 +138,9 @@ export function convertToLlm(messages) {
             case "user":
             case "assistant": {
                 const ts = formatBeijingTime(m.timestamp);
-                const prefix = ts ? `${m.role === "user" ? "User" : "Assistant"}（${ts}）: ` : "";
+                const lang = m.role === "assistant" ? getLanguage() : getLanguage();
+                const langTag = lang === "en" ? "[en]" : "[zh]";
+                const prefix = ts ? `${m.role === "user" ? "User" : "Assistant"}（${ts}）${langTag}: ` : `${langTag} `;
                 if (typeof m.content === "string") {
                     return { ...m, content: prefix + m.content };
                 }
