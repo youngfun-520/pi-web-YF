@@ -13,7 +13,7 @@ git clone https://github.com/youngfun-520/pi-web-YF.git
 cd pi-web-YF
 npm install
 npm run build
-npx . --port 30141
+node bin/pi-web.js
 ```
 
 **或通过 npx 使用官方版（无增强功能）：**
