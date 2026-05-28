@@ -1,20 +1,25 @@
-# pi-web
+# pi-web-YF
 
-[pi 编程智能体](https://github.com/badlogic/pi-mono) 的网页界面。在浏览器中浏览会话、与智能体对话、分叉对话、切换消息分支。
+[pi 编程智能体](https://github.com/badlogic/pi-mono) 的网页界面（Fork 增强版）。
+
+> 基于 [@agegr/pi-web](https://github.com/agegr/pi-web) 并增加了 **Context** 和 **Log** 功能，可实时查看 LLM 请求体的完整上下文。
 
 ## 快速开始
 
-**无需安装，直接运行：**
+**从源码安装（推荐，包含增强功能）：**
+
+```bash
+git clone https://github.com/youngfun-520/pi-web-YF.git
+cd pi-web-YF
+npm install
+npm run build
+npx . --port 30141
+```
+
+**或通过 npx 使用官方版（无增强功能）：**
 
 ```bash
 npx @agegr/pi-web@latest
-```
-
-**或全局安装后使用：**
-
-```bash
-npm install -g @agegr/pi-web
-pi-web
 ```
 
 启动后打开 [http://localhost:30141](http://localhost:30141)。
