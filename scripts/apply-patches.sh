@@ -24,4 +24,11 @@ if [ -f "$PROJECT_DIR/node_modules/@earendil-works/pi-coding-agent/node_modules/
   echo "  ✅ pi-coding-agent > pi-ai/openai-completions.js"
 fi
 
+# Patch pi-coding-agent's messages.js (timestamp injection)
+if [ -f "$PROJECT_DIR/node_modules/@earendil-works/pi-coding-agent/dist/core/messages.js" ]; then
+  cp "$PROJECT_DIR/patches/pi-coding-agent/messages.js" \
+     "$PROJECT_DIR/node_modules/@earendil-works/pi-coding-agent/dist/core/messages.js"
+  echo "  ✅ pi-coding-agent/messages.js (timestamp injection)"
+fi
+
 echo "Done!"
