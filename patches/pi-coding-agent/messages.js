@@ -138,17 +138,27 @@ export function convertToLlm(messages) {
             case "user":
             case "assistant": {
                 const ts = formatBeijingTime(m.timestamp);
-                const lang = m.role === "assistant" ? getLanguage() : getLanguage();
+                const lang = getLanguage();
                 const langTag = lang === "en" ? "[en]" : "[zh]";
-                const prefix = ts ? `${m.role === "user" ? "User" : "Assistant"}（${ts}）${langTag}: ` : `${langTag} `;
+                const roleLabel = m.role === "user" ? "User" : "Assistant";
+                const prefix = ts ? `${roleLabel}（${ts}）${langTag}: ` : `${langTag} `;
+                // Helper to add prefix, but skip if content already starts with the same pattern
+                // (LLM sometimes mimics the format in its own response)
+                const addPrefix = (text) => {
+                    const pattern = `${roleLabel}（`;
+                    if (text.startsWith(pattern) || text.startsWith(`${langTag} `)) {
+                        return text; // Already has prefix, don't duplicate
+                    }
+                    return prefix + text;
+                };
                 if (typeof m.content === "string") {
-                    return { ...m, content: prefix + m.content };
+                    return { ...m, content: addPrefix(m.content) };
                 }
                 if (Array.isArray(m.content)) {
                     const textIdx = m.content.findIndex((b) => b.type === "text");
                     if (textIdx >= 0) {
                         const updated = [...m.content];
-                        updated[textIdx] = { ...updated[textIdx], text: prefix + updated[textIdx].text };
+                        updated[textIdx] = { ...updated[textIdx], text: addPrefix(updated[textIdx].text) };
                         return { ...m, content: updated };
                     }
                 }
