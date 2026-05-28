@@ -24,8 +24,26 @@ export class AgentSessionWrapper {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private onDestroyCallback: (() => void) | null = null;
   private _alive = true;
+  /** Last complete HTTP payload sent to the LLM provider */
+  lastPayload: unknown = null;
 
-  constructor(public readonly inner: AgentSessionLike) {}
+  constructor(public readonly inner: AgentSessionLike) {
+    // Hook into the Agent's onPayload callback to capture every LLM request payload
+    const agent = inner as unknown as { agent?: { onPayload?: unknown } };
+    const agentObj = agent.agent;
+    if (agentObj) {
+      const originalOnPayload = agentObj.onPayload;
+      const wrapper = this;
+      agentObj.onPayload = async (payload: unknown, model: unknown) => {
+        wrapper.lastPayload = payload;
+        if (typeof originalOnPayload === "function") {
+          // Return the result so it can modify payload if needed
+          return (originalOnPayload as Function)(payload, model);
+        }
+        return payload;
+      };
+    }
+  }
 
   get sessionId(): string {
     return this.inner.sessionId;
@@ -203,6 +221,7 @@ export class AgentSessionWrapper {
         return all.map((t) => ({
           name: t.name,
           description: t.description,
+          parameters: t.parameters,
           active: active.has(t.name),
         }));
       }
@@ -220,6 +239,30 @@ export class AgentSessionWrapper {
       case "set_auto_retry": {
         this.inner.setAutoRetryEnabled(command.enabled as boolean);
         return null;
+      }
+
+      case "get_last_payload": {
+        return this.lastPayload;
+      }
+
+      case "get_last_payload_debug": {
+        // Return raw payload with type info for debugging
+        const raw = this.lastPayload;
+        if (!raw) return { captured: false };
+        const payload = raw as Record<string, unknown>;
+        const msgs = payload.messages as Array<Record<string, unknown>> | undefined;
+        const tools = payload.tools as Array<unknown> | undefined;
+        return {
+          captured: true,
+          hasMessages: Array.isArray(msgs),
+          messageCount: msgs?.length ?? 0,
+          messageRoles: msgs?.map((m) => m.role) ?? [],
+          hasTools: Array.isArray(tools),
+          toolCount: tools?.length ?? 0,
+          toolKeys: tools?.map((t) => Object.keys(t as object)) ?? [],
+          toolSample: tools?.[0],
+          payloadKeys: Object.keys(payload),
+        };
       }
 
       default:

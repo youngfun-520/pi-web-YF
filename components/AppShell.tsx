@@ -52,6 +52,15 @@ export function AppShell() {
     setSystemPrompt(prompt);
   }, []);
 
+  // Full context (messages sent to LLM) — fetched on demand when Context button is clicked
+  const [fullContext, setFullContext] = useState<string | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const contextBtnRef = useRef<HTMLButtonElement>(null);
+  // Raw log (JSON) fetched on demand when Log button is clicked
+  const [fullLog, setFullLog] = useState<string | null>(null);
+  const [logLoading, setLogLoading] = useState(false);
+  const logBtnRef = useRef<HTMLButtonElement>(null);
+
   // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
   const [sessionStats, setSessionStats] = useState<{ tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null>(null);
   const handleSessionStatsChange = useCallback((stats: { tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null) => {
@@ -65,12 +74,118 @@ export function AppShell() {
   }, []);
 
   // Single active panel — only one dropdown open at a time
-  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | null>(null);
+  const [activeTopPanel, setActiveTopPanel] = useState<"branches" | "system" | "context" | "log" | null>(null);
   const [topPanelPos, setTopPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const toggleTopPanel = useCallback((panel: "branches" | "system") => {
+  const toggleTopPanel = useCallback((panel: "branches" | "system" | "context" | "log") => {
     setActiveTopPanel((cur) => cur === panel ? null : panel);
   }, []);
+
+  const handleContextClick = useCallback(async () => {
+    const sid = selectedSession?.id;
+    if (!sid) return;
+    if (activeTopPanel === "context") {
+      setActiveTopPanel(null);
+      return;
+    }
+    setActiveTopPanel("context");
+    setContextLoading(true);
+    try {
+      const res = await fetch(`/api/agent/${encodeURIComponent(sid)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "get_last_payload" }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const payload = data.data ?? data;
+      if (!payload) {
+        setFullContext("No payload captured yet. Send a message first.");
+        return;
+      }
+
+      // Extract messages from payload
+      const msgs = (payload.messages as Array<{ role: string; content: unknown }>) ?? [];
+      const tools = (payload.tools as Array<{ name: string }>) ?? [];
+
+      // Build raw text (what the LLM tokenizer processes)
+      const lines: string[] = [];
+
+      for (const msg of msgs) {
+        const role = msg.role === "system" ? "System" : msg.role === "user" ? "User" : msg.role === "assistant" ? "Assistant" : msg.role;
+        let content = "";
+        if (typeof msg.content === "string") {
+          content = msg.content;
+        } else if (Array.isArray(msg.content)) {
+          content = msg.content
+            .filter((b: { type: string }) => b.type === "text")
+            .map((b: { text: string }) => b.text)
+            .join(" ");
+        }
+        if (content) {
+          if (msg.role === "system") {
+            lines.push(content);
+          } else {
+            lines.push(`${role}: ${content}`);
+          }
+          lines.push("");
+        }
+      }
+
+      if (tools.length > 0) {
+        lines.push("[Available Tools]");
+        for (const t of tools) {
+          const entry = t as Record<string, unknown>;
+          // Try multiple formats: { function: { name } }, { name }, or different structure
+          const fn = entry.function as Record<string, unknown> | undefined;
+          const name = fn?.name ?? entry.name ?? entry.id ?? JSON.stringify(entry).slice(0,100);
+          const desc = fn?.description ?? entry.description ?? "";
+          const params = fn?.parameters ?? entry.parameters;
+          lines.push(`- ${name}: ${desc}`);
+          if (params) {
+            lines.push(`  Parameters: ${JSON.stringify(params)}`);
+          }
+        }
+        lines.push("");
+      }
+
+      setFullContext(lines.join("\n"));
+    } catch (e) {
+      setFullContext(`Error: ${e}`);
+    } finally {
+      setContextLoading(false);
+    }
+  }, [selectedSession?.id, activeTopPanel]);
+
+  const handleLogClick = useCallback(async () => {
+    const sid = selectedSession?.id;
+    if (!sid) return;
+    if (activeTopPanel === "log") {
+      setActiveTopPanel(null);
+      return;
+    }
+    setActiveTopPanel("log");
+    setLogLoading(true);
+    try {
+      const res = await fetch(`/api/agent/${encodeURIComponent(sid)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "get_last_payload" }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const payload = data.data ?? data;
+      if (!payload) {
+        setFullLog("No payload captured yet. Send a message first.");
+        return;
+      }
+      setFullLog(JSON.stringify(payload, null, 2));
+    } catch (e) {
+      setFullLog(`Error: ${e}`);
+    } finally {
+      setLogLoading(false);
+    }
+  }, [selectedSession?.id, activeTopPanel]);
 
   useEffect(() => {
     if (!activeTopPanel || !topBarRef.current) return;
@@ -118,6 +233,8 @@ export function AppShell() {
     setBranchTree([]);
     setBranchActiveLeafId(null);
     setSystemPrompt(null);
+    setFullContext(null);
+    setFullLog(null);
     setActiveTopPanel(null);
     router.replace("/", { scroll: false });
   }, [router]);
@@ -127,6 +244,8 @@ export function AppShell() {
     setSelectedSession(session);
     setSessionKey((k) => k + 1);
     setSystemPrompt(null);
+    setFullContext(null);
+    setFullLog(null);
     setInitialSessionRestored(true);
     if (isRestore) {
       // Suppress the redundant sessionKey bump that would come from the
@@ -148,6 +267,8 @@ export function AppShell() {
     setBranchTree([]);
     setBranchActiveLeafId(null);
     setSystemPrompt(null);
+    setFullContext(null);
+    setFullLog(null);
     setActiveTopPanel(null);
     router.replace("/", { scroll: false });
   }, [router]);
@@ -190,6 +311,8 @@ export function AppShell() {
       setBranchTree([]);
       setBranchActiveLeafId(null);
       setSystemPrompt(null);
+      setFullContext(null);
+      setFullLog(null);
       setActiveTopPanel(null);
       router.replace("/", { scroll: false });
     }
@@ -421,6 +544,54 @@ export function AppShell() {
                 </svg>
                 <span>System</span>
               </button>
+              <button
+                ref={contextBtnRef}
+                onClick={handleContextClick}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  height: "100%", padding: "0 12px",
+                  background: activeTopPanel === "context" ? "var(--bg-selected)" : "none",
+                  border: "none",
+                  borderTop: activeTopPanel === "context" ? "2px solid var(--accent)" : "2px solid transparent",
+                  borderRight: "1px solid var(--border)",
+                  cursor: "pointer",
+                  color: activeTopPanel === "context" ? "var(--text)" : "var(--text-muted)",
+                  fontSize: 11, whiteSpace: "nowrap", transition: "color 0.1s, background 0.1s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = activeTopPanel === "context" ? "var(--text)" : "var(--text-muted)"; }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: fullContext ? "var(--accent)" : "var(--text-dim)", flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span>Context</span>
+              </button>
+              <button
+                ref={logBtnRef}
+                onClick={handleLogClick}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  height: "100%", padding: "0 12px",
+                  background: activeTopPanel === "log" ? "var(--bg-selected)" : "none",
+                  border: "none",
+                  borderTop: activeTopPanel === "log" ? "2px solid var(--accent)" : "2px solid transparent",
+                  borderRight: "1px solid var(--border)",
+                  cursor: "pointer",
+                  color: activeTopPanel === "log" ? "var(--text)" : "var(--text-muted)",
+                  fontSize: 11, whiteSpace: "nowrap", transition: "color 0.1s, background 0.1s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = activeTopPanel === "log" ? "var(--text)" : "var(--text-muted)"; }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: fullLog ? "var(--accent)" : "var(--text-dim)", flexShrink: 0 }}>
+                  <path d="M3 3h18v18H3z" />
+                  <line x1="7" y1="8" x2="17" y2="8" />
+                  <line x1="7" y1="12" x2="17" y2="12" />
+                  <line x1="7" y1="16" x2="13" y2="16" />
+                </svg>
+                <span>Log</span>
+              </button>
             </div>
           )}
           {/* Session stats — right-aligned in top bar */}
@@ -541,6 +712,98 @@ export function AppShell() {
                   ) : (
                     <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
                       Send a message to load the system prompt
+                    </div>
+                  )}
+                </div>
+              )}
+              {activeTopPanel === "context" && (
+                <div style={{
+                  background: "var(--bg-panel)",
+                  borderBottom: "1px solid var(--border)",
+                }}>
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 16px",
+                    borderBottom: "1px solid var(--border)",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--text-dim)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                  }}>
+                    <span>LLM Raw Context</span>
+                    <span style={{ fontWeight: 400, color: "var(--text-muted)", textTransform: "none" }}>
+                      {contextLoading ? "Loading…" : fullContext ? `${(fullContext.length / 1024).toFixed(1)} KB` : ""}
+                    </span>
+                  </div>
+                  {contextLoading ? (
+                    <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
+                      Fetching context…
+                    </div>
+                  ) : fullContext ? (
+                    <div style={{
+                      maxHeight: "min(600px, 75vh)",
+                      overflowY: "auto",
+                      padding: "12px 16px",
+                      color: "var(--text-muted)",
+                      fontSize: 11,
+                      lineHeight: 1.5,
+                      whiteSpace: "pre-wrap",
+                      fontFamily: "var(--font-mono)",
+                    }}>
+                      {fullContext}
+                    </div>
+                  ) : (
+                    <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
+                      Send a message then click Context to see what the LLM tokenizer processes.
+                    </div>
+                  )}
+                </div>
+              )}
+              {activeTopPanel === "log" && (
+                <div style={{
+                  background: "var(--bg-panel)",
+                  borderBottom: "1px solid var(--border)",
+                }}>
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 16px",
+                    borderBottom: "1px solid var(--border)",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--text-dim)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                  }}>
+                    <span>Full Data Log</span>
+                    <span style={{ fontWeight: 400, color: "var(--text-muted)", textTransform: "none" }}>
+                      {logLoading ? "Loading…" : fullLog ? `${(fullLog.length / 1024).toFixed(1)} KB` : ""}
+                    </span>
+                  </div>
+                  {logLoading ? (
+                    <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
+                      Fetching log…
+                    </div>
+                  ) : fullLog ? (
+                    <div style={{
+                      maxHeight: "min(600px, 75vh)",
+                      overflowY: "auto",
+                      padding: "12px 16px",
+                      color: "var(--text-muted)",
+                      fontSize: 11,
+                      lineHeight: 1.5,
+                      whiteSpace: "pre",
+                      fontFamily: "var(--font-mono)",
+                    }}>
+                      {fullLog}
+                    </div>
+                  ) : (
+                    <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
+                      Click the Log button to view the structured JSON with system prompt, tools & messages.
                     </div>
                   )}
                 </div>
