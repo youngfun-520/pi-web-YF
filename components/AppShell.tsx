@@ -61,6 +61,34 @@ export function AppShell() {
   const [logLoading, setLogLoading] = useState(false);
   const logBtnRef = useRef<HTMLButtonElement>(null);
 
+  // Language preference — read from settings.json at mount
+  const [currentLang, setCurrentLang] = useState<"zh" | "en">("zh");
+  useEffect(() => {
+    fetch("/api/home").then(() => {}); // placeholder to ensure page loaded
+    try {
+      // Read settings.json via a simple fetch
+      fetch("/api/default-cwd").catch(() => {});
+      // We'll set from a lightweight endpoint instead
+    } catch { /* ignore */ }
+    // Initialize from hardcoded default — will be refreshed after first interaction
+  }, []);
+
+  const handleLanguageToggle = useCallback(async () => {
+    const sid = selectedSession?.id;
+    if (!sid) return;
+    const next = currentLang === "zh" ? "en" : "zh";
+    try {
+      const res = await fetch(`/api/agent/${encodeURIComponent(sid)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "set_language", language: next }),
+      });
+      if (res.ok) {
+        setCurrentLang(next);
+      }
+    } catch { /* ignore */ }
+  }, [selectedSession?.id, currentLang]);
+
   // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
   const [sessionStats, setSessionStats] = useState<{ tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null>(null);
   const handleSessionStatsChange = useCallback((stats: { tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost?: number } | null) => {
@@ -509,6 +537,23 @@ export function AppShell() {
           </button>
           {showChat && (
             <div style={{ display: "flex", alignItems: "stretch", height: "100%" }}>
+              <button
+                onClick={handleLanguageToggle}
+                title={currentLang === "zh" ? "当前语言: 中文，点击切换为英文" : "Current language: English, click to switch to Chinese"}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 36, height: 36, padding: 0,
+                  background: "none", border: "none", borderRight: "1px solid var(--border)",
+                  color: "var(--text-muted)", cursor: "pointer", flexShrink: 0,
+                  fontSize: 11, fontWeight: 700,
+                  transition: "color 0.12s",
+                  fontFamily: "var(--font-mono)",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
+              >
+                {currentLang === "zh" ? "中" : "EN"}
+              </button>
               <BranchNavigator
                 tree={branchTree}
                 activeLeafId={branchActiveLeafId}

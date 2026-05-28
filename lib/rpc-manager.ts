@@ -250,6 +250,25 @@ export class AgentSessionWrapper {
         return null;
       }
 
+      case "set_language": {
+        const { language } = command as { language: string };
+        if (language !== "zh" && language !== "en") {
+          throw new Error(`Invalid language: ${language}`);
+        }
+        // Read settings, update defaultLanguage, write back
+        const fs = require("fs");
+        const path = require("path");
+        const agentDir = process.env.PI_CODING_AGENT_DIR || require("os").homedir() + "/.pi/agent";
+        const settingsPath = path.join(agentDir, "settings.json");
+        const raw = fs.readFileSync(settingsPath, "utf-8");
+        const settings = JSON.parse(raw);
+        settings.defaultLanguage = language;
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+        // Reload session to pick up the change
+        await this.inner.reload();
+        return { language };
+      }
+
       case "get_last_payload_debug": {
         // Return raw payload with type info for debugging
         const raw = this.lastPayload;
