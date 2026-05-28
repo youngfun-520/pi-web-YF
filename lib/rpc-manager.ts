@@ -245,6 +245,11 @@ export class AgentSessionWrapper {
         return this.lastPayload;
       }
 
+      case "reload_skills": {
+        await this.inner.reload();
+        return null;
+      }
+
       case "get_last_payload_debug": {
         // Return raw payload with type info for debugging
         const raw = this.lastPayload;

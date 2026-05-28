@@ -508,9 +508,11 @@ function AddSkillPanel({
 
 export function SkillsConfig({
   cwd,
+  sessionId,
   onClose,
 }: {
   cwd: string;
+  sessionId: string | null;
   onClose: () => void;
 }) {
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -568,6 +570,14 @@ export function SkillsConfig({
             : s,
         ),
       );
+      // Notify the running session to reload skills and rebuild system prompt
+      if (sessionId) {
+        fetch(`/api/agent/${encodeURIComponent(sessionId)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "reload_skills" }),
+        }).catch(() => {});
+      }
     } catch (e) {
       setSaveError(String(e));
     } finally {
