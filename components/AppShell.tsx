@@ -64,29 +64,32 @@ export function AppShell() {
   // Language preference — read from settings.json at mount
   const [currentLang, setCurrentLang] = useState<"zh" | "en">("zh");
   useEffect(() => {
-    fetch("/api/home").then(() => {}); // placeholder to ensure page loaded
-    try {
-      // Read settings.json via a simple fetch
-      fetch("/api/default-cwd").catch(() => {});
-      // We'll set from a lightweight endpoint instead
-    } catch { /* ignore */ }
-    // Initialize from hardcoded default — will be refreshed after first interaction
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((s) => {
+        if (s.defaultLanguage === "en") setCurrentLang("en");
+      })
+      .catch(() => {});
   }, []);
 
   const handleLanguageToggle = useCallback(async () => {
-    const sid = selectedSession?.id;
-    if (!sid) return;
     const next = currentLang === "zh" ? "en" : "zh";
-    try {
-      const res = await fetch(`/api/agent/${encodeURIComponent(sid)}`, {
+    // Always update settings.json
+    await fetch("/api/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "defaultLanguage", value: next }),
+    }).catch(() => {});
+    // Also reload the active session if any
+    const sid = selectedSession?.id;
+    if (sid) {
+      await fetch(`/api/agent/${encodeURIComponent(sid)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "set_language", language: next }),
-      });
-      if (res.ok) {
-        setCurrentLang(next);
-      }
-    } catch { /* ignore */ }
+      }).catch(() => {});
+    }
+    setCurrentLang(next);
   }, [selectedSession?.id, currentLang]);
 
   // Session stats (tokens + cost) — populated by ChatWindow, displayed in top bar
@@ -140,7 +143,6 @@ export function AppShell() {
       const lines: string[] = [];
 
       for (const msg of msgs) {
-        const role = msg.role === "system" ? "System" : msg.role === "user" ? "User" : msg.role === "assistant" ? "Assistant" : msg.role;
         let content = "";
         if (typeof msg.content === "string") {
           content = msg.content;
@@ -151,11 +153,8 @@ export function AppShell() {
             .join(" ");
         }
         if (content) {
-          if (msg.role === "system") {
-            lines.push(content);
-          } else {
-            lines.push(`${role}: ${content}`);
-          }
+          // Content already has timestamp + language prefix from convertToLlm patch
+          lines.push(content);
           lines.push("");
         }
       }
