@@ -47,6 +47,7 @@ PORT=8080 pi-web                 # 也支持环境变量
 - **引导 / 追加** — 打断正在运行的智能体，或在其完成后追加消息
 - **上下文查看** — 点击顶部栏「Context」查看 LLM tokenizer 实际处理的纯文本内容
 - **请求日志** — 点击顶部栏「Log」查看每次 LLM 请求的完整 JSON payload（含 tools、messages、provider 参数）
+- **技能热解耦** — 在 Skills 面板开关 skill 后即时生效，无需新建会话
 
 ## 注意事项
 
